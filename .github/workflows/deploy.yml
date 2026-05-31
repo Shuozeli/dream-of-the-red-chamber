@@ -1,4 +1,4 @@
-name: Deploy UI to GitHub Pages
+name: Build UI Artifact
 
 on:
   push:
@@ -13,12 +13,9 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# Allow only one concurrent deployment; cancel in-progress runs.
 concurrency:
-  group: pages
+  group: ui-artifact
   cancel-in-progress: true
 
 jobs:
@@ -57,18 +54,8 @@ jobs:
         working-directory: ui
         run: pnpm build
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload UI artifact
+        uses: actions/upload-artifact@v4
         with:
+          name: ui-dist
           path: ui/dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - name: Deploy to Pages
-        id: deploy
-        uses: actions/deploy-pages@v4

@@ -189,11 +189,6 @@ function clampPageSize(n: number | undefined): number {
   return Math.min(Math.max(n, 1), MAX_PAGE_SIZE)
 }
 
-/** AIP-160 client-side helper: page (1-indexed) ↔ page_token. */
-export function pageTokenForPage(page: number, pageSize: number): string {
-  return encodePageToken(Math.max(0, (page - 1) * pageSize))
-}
-
 function toNum(v: unknown): number {
   if (typeof v === 'number') return v
   if (typeof v === 'bigint') return Number(v)

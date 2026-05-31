@@ -16,8 +16,10 @@ import {
 } from 'antd'
 import type { TableProps } from 'antd'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api, pageTokenForPage, type PoemDetail, type PoemListItem } from '../api'
+import { api, type PoemDetail, type PoemListItem } from '../api'
 import { useIsMobile } from '../lib/useIsMobile'
+import { useCursor } from '../lib/useCursor'
+import { CursorPagination } from '../lib/CursorPagination'
 
 const PAGE_SIZE = 50
 
@@ -34,12 +36,9 @@ export default function Poems() {
   const [formFilter, setFormFilter] = useState<string | undefined>()
   const [items, setItems] = useState<PoemListItem[]>([])
   const [totalSize, setTotalSize] = useState(0)
-  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    setPage(1)
-  }, [q, chapterFilter, formFilter])
+  const cursor = useCursor(`${q}|${chapterFilter ?? ''}|${formFilter ?? ''}`)
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -50,16 +49,18 @@ export default function Poems() {
           chapter: chapterFilter ?? undefined,
           form: formFilter,
           page_size: PAGE_SIZE,
-          page_token: pageTokenForPage(page, PAGE_SIZE),
+          page_token: cursor.currentToken,
         })
         .then((r) => {
           setItems(r.items)
           setTotalSize(r.total_size)
+          cursor.setNextToken(r.next_page_token)
         })
         .finally(() => setLoading(false))
     }, 200)
     return () => clearTimeout(t)
-  }, [q, chapterFilter, formFilter, page])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, chapterFilter, formFilter, cursor.currentToken])
 
   const columns: TableProps<PoemListItem>['columns'] = [
     { title: '回', dataIndex: 'chapter', key: 'chapter', width: 50 },
@@ -150,17 +151,17 @@ export default function Poems() {
           onClick: () => navigate(`/poems/${record.id}`),
           style: { cursor: 'pointer' },
         })}
-        pagination={{
-          current: page,
-          pageSize: PAGE_SIZE,
-          total: totalSize,
-          showSizeChanger: false,
-          showTotal: (t) => `共 ${t} 首`,
-          onChange: (p) => setPage(p),
-          size: 'small',
-          simple: isMobile,
-        }}
+        pagination={false}
         scroll={{ y: 'calc(100vh - 180px)', x: isMobile ? 'max-content' : undefined }}
+        footer={() => (
+          <CursorPagination
+            cursor={cursor}
+            pageSize={PAGE_SIZE}
+            shownInPage={items.length}
+            totalSize={totalSize}
+            unit="首"
+          />
+        )}
       />
     </Card>
   )
