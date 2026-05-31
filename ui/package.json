@@ -1,0 +1,42 @@
+{
+  "name": "ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "sync-data": "rm -rf public/parsed && mkdir -p public && cp -r ../data/parsed public/parsed && uv run --with 'duckdb==1.3.2' ../scripts/build_duckdb.py",
+    "predev": "pnpm run sync-data",
+    "prebuild": "pnpm run sync-data",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ant-design/charts": "^2.6.7",
+    "@ant-design/icons": "^6.2.5",
+    "@antv/g2": "^5.4.8",
+    "@antv/g6": "^5.1.1",
+    "@antv/s2": "^2.7.1",
+    "@duckdb/duckdb-wasm": "1.33.1-dev45.0",
+    "antd": "^6.4.3",
+    "opencc-js": "^1.3.1",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.16.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^8.0.12"
+  }
+}

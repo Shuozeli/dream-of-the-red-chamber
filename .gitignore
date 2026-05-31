@@ -1,0 +1,17 @@
+# Node
+node_modules/
+.pnpm-debug.log
+.pnpm-store/
+
+# Vite / build outputs
+ui/dist/
+ui/.vite/
+
+# Build artifacts derived from data/ by `pnpm sync-data`
+ui/public/hongloumeng.duckdb
+ui/public/parsed/
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
