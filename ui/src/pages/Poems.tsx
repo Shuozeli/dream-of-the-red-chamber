@@ -16,8 +16,10 @@ import {
 } from 'antd'
 import type { TableProps } from 'antd'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api, type PoemDetail, type PoemListItem } from '../api'
+import { api, pageTokenForPage, type PoemDetail, type PoemListItem } from '../api'
 import { useIsMobile } from '../lib/useIsMobile'
+
+const PAGE_SIZE = 50
 
 const POEM_FORMS = ['诗', '词', '曲', '赋', '对联', '灯谜', '酒令', '偈', '判词', '其他']
 
@@ -31,8 +33,13 @@ export default function Poems() {
   const [chapterFilter, setChapterFilter] = useState<number | null>(null)
   const [formFilter, setFormFilter] = useState<string | undefined>()
   const [items, setItems] = useState<PoemListItem[]>([])
-  const [total, setTotal] = useState(0)
+  const [totalSize, setTotalSize] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setPage(1)
+  }, [q, chapterFilter, formFilter])
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -42,16 +49,17 @@ export default function Poems() {
           q: q || undefined,
           chapter: chapterFilter ?? undefined,
           form: formFilter,
-          limit: 5000,
+          page_size: PAGE_SIZE,
+          page_token: pageTokenForPage(page, PAGE_SIZE),
         })
         .then((r) => {
           setItems(r.items)
-          setTotal(r.total)
+          setTotalSize(r.total_size)
         })
         .finally(() => setLoading(false))
     }, 200)
     return () => clearTimeout(t)
-  }, [q, chapterFilter, formFilter])
+  }, [q, chapterFilter, formFilter, page])
 
   const columns: TableProps<PoemListItem>['columns'] = [
     { title: '回', dataIndex: 'chapter', key: 'chapter', width: 50 },
@@ -94,7 +102,7 @@ export default function Poems() {
         <Space>
           <span>诗词</span>
           <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 'normal' }}>
-            共 {total} 首
+            共 {totalSize} 首
           </Typography.Text>
         </Space>
       }
@@ -142,8 +150,17 @@ export default function Poems() {
           onClick: () => navigate(`/poems/${record.id}`),
           style: { cursor: 'pointer' },
         })}
-        pagination={false}
-        scroll={{ y: 'calc(100vh - 138px)', x: isMobile ? 'max-content' : undefined }}
+        pagination={{
+          current: page,
+          pageSize: PAGE_SIZE,
+          total: totalSize,
+          showSizeChanger: false,
+          showTotal: (t) => `共 ${t} 首`,
+          onChange: (p) => setPage(p),
+          size: 'small',
+          simple: isMobile,
+        }}
+        scroll={{ y: 'calc(100vh - 180px)', x: isMobile ? 'max-content' : undefined }}
       />
     </Card>
   )

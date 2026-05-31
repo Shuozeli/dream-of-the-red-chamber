@@ -95,7 +95,7 @@ export default function GraphView() {
   useEffect(() => {
     setSearching(true)
     api
-      .characters({ limit: 50, sort: 'chapters' })
+      .characters({ page_size: 50, sort: 'chapters' })
       .then((r) => setSearchOptions(r.items))
       .finally(() => setSearching(false))
   }, [])
@@ -103,20 +103,20 @@ export default function GraphView() {
     if (!q) return
     setSearching(true)
     api
-      .characters({ q, limit: 30 })
+      .characters({ q, page_size: 30 })
       .then((r) => setSearchOptions(r.items))
       .finally(() => setSearching(false))
   }
   // Initial seed for the 对比 picker; also drives keyword search.
   useEffect(() => {
-    api.characters({ limit: 50, sort: 'chapters' }).then((r) => setCompareSearch(r.items))
+    api.characters({ page_size: 50, sort: 'chapters' }).then((r) => setCompareSearch(r.items))
   }, [])
   const onSearchCompare = (q: string) => {
     if (!q) {
-      api.characters({ limit: 50, sort: 'chapters' }).then((r) => setCompareSearch(r.items))
+      api.characters({ page_size: 50, sort: 'chapters' }).then((r) => setCompareSearch(r.items))
       return
     }
-    api.characters({ q, limit: 30 }).then((r) => setCompareSearch(r.items))
+    api.characters({ q, page_size: 30 }).then((r) => setCompareSearch(r.items))
   }
 
   // ----- fetch graph -----
@@ -497,7 +497,7 @@ function PairDrawerBody({
       setTgt(t)
     })
     api
-      .events({ participants: `${sourceId},${targetId}`, limit: 5000 })
+      .events({ participants: `${sourceId},${targetId}`, page_size: 1000 })
       .then((r) => setEvents(r.items))
   }, [sourceId, targetId])
 

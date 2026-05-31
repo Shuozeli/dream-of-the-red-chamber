@@ -16,8 +16,10 @@ import {
 } from 'antd'
 import type { TableProps } from 'antd'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api, type EventDetail, type EventListItem } from '../api'
+import { api, pageTokenForPage, type EventDetail, type EventListItem } from '../api'
 import { useIsMobile } from '../lib/useIsMobile'
+
+const PAGE_SIZE = 50
 
 const EVENT_KINDS = [
   '其他', '议事', '相遇', '探病', '争吵', '闯祸', '离别', '家宴', '诗会', '葬礼',
@@ -34,8 +36,13 @@ export default function Events() {
   const [chapterFilter, setChapterFilter] = useState<number | null>(null)
   const [kindFilter, setKindFilter] = useState<string | undefined>()
   const [items, setItems] = useState<EventListItem[]>([])
-  const [total, setTotal] = useState(0)
+  const [totalSize, setTotalSize] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setPage(1)
+  }, [q, chapterFilter, kindFilter])
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -45,16 +52,17 @@ export default function Events() {
           q: q || undefined,
           chapter: chapterFilter ?? undefined,
           kind: kindFilter,
-          limit: 5000,
+          page_size: PAGE_SIZE,
+          page_token: pageTokenForPage(page, PAGE_SIZE),
         })
         .then((r) => {
           setItems(r.items)
-          setTotal(r.total)
+          setTotalSize(r.total_size)
         })
         .finally(() => setLoading(false))
     }, 200)
     return () => clearTimeout(t)
-  }, [q, chapterFilter, kindFilter])
+  }, [q, chapterFilter, kindFilter, page])
 
   const columns: TableProps<EventListItem>['columns'] = [
     { title: '回', dataIndex: 'chapter', key: 'chapter', width: 50 },
@@ -103,7 +111,7 @@ export default function Events() {
         <Space>
           <span>事件</span>
           <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 'normal' }}>
-            共 {total} 件
+            共 {totalSize} 件
           </Typography.Text>
         </Space>
       }
@@ -151,8 +159,17 @@ export default function Events() {
           onClick: () => navigate(`/events/${record.id}`),
           style: { cursor: 'pointer' },
         })}
-        pagination={false}
-        scroll={{ y: 'calc(100vh - 138px)', x: isMobile ? 'max-content' : undefined }}
+        pagination={{
+          current: page,
+          pageSize: PAGE_SIZE,
+          total: totalSize,
+          showSizeChanger: false,
+          showTotal: (t) => `共 ${t} 件`,
+          onChange: (p) => setPage(p),
+          size: 'small',
+          simple: isMobile,
+        }}
+        scroll={{ y: 'calc(100vh - 180px)', x: isMobile ? 'max-content' : undefined }}
       />
     </Card>
   )

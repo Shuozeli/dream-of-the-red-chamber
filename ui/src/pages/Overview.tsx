@@ -27,10 +27,10 @@ export default function Overview({ onNavigate: _onNavigate }: Props) {
     Promise.all([
       api.stats(),
       api.chapters(),
-      api.characters({ limit: 12, sort: 'chapters' }),
-      // Pull a chunk of events/poems large enough to derive type/form distributions
-      api.events({ limit: 500 }),
-      api.poems({ limit: 500 }),
+      api.characters({ page_size: 12, sort: 'chapters' }),
+      // Sample enough events/poems to derive type/form distributions.
+      api.events({ page_size: 1000 }),
+      api.poems({ page_size: 1000 }),
     ])
       .then(([s, c, ch, ev, pm]) => {
         setStats(s)

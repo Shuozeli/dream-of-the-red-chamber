@@ -26,11 +26,18 @@ export interface CharacterListItem {
   aliases_count: number
 }
 
+/**
+ * Pagination follows Google AIP-160 / AIP-158:
+ * - request: `page_size` (1..1000, default 50), `page_token` (opaque)
+ * - response: `items`, `next_page_token` ('' when no more), `total_size`
+ *
+ * The `page_token` is opaque to callers. Today it base64-encodes an
+ * offset; that's an implementation detail and could change later.
+ */
 export interface CharacterListResponse {
-  total: number
-  limit: number
-  offset: number
   items: CharacterListItem[]
+  next_page_token: string
+  total_size: number
 }
 
 export interface CharacterDetail {
@@ -60,10 +67,9 @@ export interface EventListItem {
 }
 
 export interface EventListResponse {
-  total: number
-  limit: number
-  offset: number
   items: EventListItem[]
+  next_page_token: string
+  total_size: number
 }
 
 export interface CharacterRef {
@@ -98,10 +104,9 @@ export interface PoemListItem {
 }
 
 export interface PoemListResponse {
-  total: number
-  limit: number
-  offset: number
   items: PoemListItem[]
+  next_page_token: string
+  total_size: number
 }
 
 export interface PoemDetail {
@@ -159,6 +164,35 @@ export interface GraphResponse {
 // ============================================================
 // Helpers
 // ============================================================
+
+// ----- AIP-160 pagination helpers (page_token <-> offset) -----
+
+const DEFAULT_PAGE_SIZE = 50
+const MAX_PAGE_SIZE = 1000
+
+function decodePageToken(token: string | undefined | null): number {
+  if (!token) return 0
+  try {
+    const n = Number(atob(token))
+    return Number.isFinite(n) && n >= 0 ? n : 0
+  } catch {
+    return 0
+  }
+}
+
+function encodePageToken(offset: number): string {
+  return offset > 0 ? btoa(String(offset)) : ''
+}
+
+function clampPageSize(n: number | undefined): number {
+  if (n == null) return DEFAULT_PAGE_SIZE
+  return Math.min(Math.max(n, 1), MAX_PAGE_SIZE)
+}
+
+/** AIP-160 client-side helper: page (1-indexed) ↔ page_token. */
+export function pageTokenForPage(page: number, pageSize: number): string {
+  return encodePageToken(Math.max(0, (page - 1) * pageSize))
+}
 
 function toNum(v: unknown): number {
   if (typeof v === 'number') return v
@@ -225,10 +259,10 @@ async function stats(): Promise<Stats> {
 // ============================================================
 
 async function characters(
-  opts: { q?: string; sort?: string; limit?: number; offset?: number } = {},
+  opts: { q?: string; sort?: string; page_size?: number; page_token?: string } = {},
 ): Promise<CharacterListResponse> {
-  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 5000)
-  const offset = Math.max(opts.offset ?? 0, 0)
+  const pageSize = clampPageSize(opts.page_size)
+  const offset = decodePageToken(opts.page_token)
   const order =
     opts.sort === 'name'
       ? 'canonical_name ASC'
@@ -251,6 +285,7 @@ async function characters(
     `SELECT count(*)::BIGINT AS n FROM characters ${where}`,
     params,
   )
+  const totalSize = toNum(totalRow?.n ?? 0)
   const items = await query(
     `
     SELECT id, canonical_name, canonical_slug, primary_role,
@@ -258,23 +293,24 @@ async function characters(
            len(aliases)::INTEGER AS aliases_count
     FROM characters ${where}
     ORDER BY ${order}
-    LIMIT ${limit} OFFSET ${offset}
+    LIMIT ${pageSize} OFFSET ${offset}
     `,
     params,
   )
+  const mapped = items.map((r) => ({
+    id: toNum(r.id),
+    canonical_name: toStr(r.canonical_name),
+    canonical_slug: toStr(r.canonical_slug),
+    primary_role: toStr(r.primary_role),
+    first_chapter: toNum(r.first_chapter),
+    chapters_count: toNum(r.chapters_count),
+    aliases_count: toNum(r.aliases_count),
+  }))
+  const nextOffset = offset + mapped.length
   return {
-    total: toNum(totalRow?.n ?? 0),
-    limit,
-    offset,
-    items: items.map((r) => ({
-      id: toNum(r.id),
-      canonical_name: toStr(r.canonical_name),
-      canonical_slug: toStr(r.canonical_slug),
-      primary_role: toStr(r.primary_role),
-      first_chapter: toNum(r.first_chapter),
-      chapters_count: toNum(r.chapters_count),
-      aliases_count: toNum(r.aliases_count),
-    })),
+    items: mapped,
+    next_page_token: nextOffset < totalSize ? encodePageToken(nextOffset) : '',
+    total_size: totalSize,
   }
 }
 
@@ -335,12 +371,12 @@ async function events(
     participant_id?: number
     participants?: string
     q?: string
-    limit?: number
-    offset?: number
+    page_size?: number
+    page_token?: string
   } = {},
 ): Promise<EventListResponse> {
-  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 5000)
-  const offset = Math.max(opts.offset ?? 0, 0)
+  const pageSize = clampPageSize(opts.page_size)
+  const offset = decodePageToken(opts.page_token)
 
   const parts: string[] = []
   const params: unknown[] = []
@@ -376,6 +412,7 @@ async function events(
     `SELECT count(*)::BIGINT AS n FROM canonical_events ${where}`,
     params,
   )
+  const totalSize = toNum(totalRow?.n ?? 0)
 
   // Participants resolved → names ordered by chapter coverage desc.
   const items = await query(
@@ -398,27 +435,28 @@ async function events(
     LEFT JOIN parts p ON p.event_id = e.id
     ${where}
     ORDER BY e.chapter, e.scene_index
-    LIMIT ${limit} OFFSET ${offset}
+    LIMIT ${pageSize} OFFSET ${offset}
     `,
     params,
   )
 
+  const mapped = items.map((r) => ({
+    id: toNum(r.id),
+    chapter: toNum(r.chapter),
+    scene_index: toNum(r.scene_index),
+    kind: toStr(r.type),
+    title: toStr(r.title),
+    summary: toStr(r.summary),
+    participant_count: toNum(r.participant_count),
+    participant_ids: toIntList(r.participant_ids),
+    participant_names: toStrList(r.participant_names),
+    location_hint: toOpt(r.location_hint),
+  }))
+  const nextOffset = offset + mapped.length
   return {
-    total: toNum(totalRow?.n ?? 0),
-    limit,
-    offset,
-    items: items.map((r) => ({
-      id: toNum(r.id),
-      chapter: toNum(r.chapter),
-      scene_index: toNum(r.scene_index),
-      kind: toStr(r.type),
-      title: toStr(r.title),
-      summary: toStr(r.summary),
-      participant_count: toNum(r.participant_count),
-      participant_ids: toIntList(r.participant_ids),
-      participant_names: toStrList(r.participant_names),
-      location_hint: toOpt(r.location_hint),
-    })),
+    items: mapped,
+    next_page_token: nextOffset < totalSize ? encodePageToken(nextOffset) : '',
+    total_size: totalSize,
   }
 }
 
@@ -481,12 +519,12 @@ async function poems(
     chapter?: number
     theme?: string
     q?: string
-    limit?: number
-    offset?: number
+    page_size?: number
+    page_token?: string
   } = {},
 ): Promise<PoemListResponse> {
-  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 5000)
-  const offset = Math.max(opts.offset ?? 0, 0)
+  const pageSize = clampPageSize(opts.page_size)
+  const offset = decodePageToken(opts.page_token)
 
   const parts: string[] = []
   const params: unknown[] = []
@@ -517,6 +555,7 @@ async function poems(
     `SELECT count(*)::BIGINT AS n FROM poems p JOIN poem_annotations pa ON pa.poem_id = p.id ${where}`,
     params,
   )
+  const totalSize = toNum(totalRow?.n ?? 0)
 
   const items = await query(
     `
@@ -528,27 +567,28 @@ async function poems(
     LEFT JOIN characters c ON c.id = pa.author_id
     ${where}
     ORDER BY p.chapter, p.scene_index
-    LIMIT ${limit} OFFSET ${offset}
+    LIMIT ${pageSize} OFFSET ${offset}
     `,
     params,
   )
 
+  const mapped = items.map((r) => ({
+    id: toNum(r.id),
+    chapter: toNum(r.chapter),
+    scene_index: toNum(r.scene_index),
+    form: toStr(r.form),
+    title: r.title == null ? null : toStr(r.title),
+    author_id: r.author_id == null ? null : toNum(r.author_id),
+    author_name: r.author_name == null ? null : toStr(r.author_name),
+    occasion: toOpt(r.occasion),
+    first_line: firstLineOf(toStr(r.text)),
+    themes: toStrList(r.themes),
+  }))
+  const nextOffset = offset + mapped.length
   return {
-    total: toNum(totalRow?.n ?? 0),
-    limit,
-    offset,
-    items: items.map((r) => ({
-      id: toNum(r.id),
-      chapter: toNum(r.chapter),
-      scene_index: toNum(r.scene_index),
-      form: toStr(r.form),
-      title: r.title == null ? null : toStr(r.title),
-      author_id: r.author_id == null ? null : toNum(r.author_id),
-      author_name: r.author_name == null ? null : toStr(r.author_name),
-      occasion: toOpt(r.occasion),
-      first_line: firstLineOf(toStr(r.text)),
-      themes: toStrList(r.themes),
-    })),
+    items: mapped,
+    next_page_token: nextOffset < totalSize ? encodePageToken(nextOffset) : '',
+    total_size: totalSize,
   }
 }
 
@@ -662,8 +702,8 @@ async function chapter(n: number): Promise<ChapterDetail> {
     // ignore — page will render with empty text
   }
 
-  const ev = await events({ chapter: n, limit: 5000 })
-  const pm = await poems({ chapter: n, limit: 5000 })
+  const ev = await events({ chapter: n, page_size: 1000 })
+  const pm = await poems({ chapter: n, page_size: 1000 })
 
   return {
     id: toNum(row.id),

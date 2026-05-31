@@ -18,12 +18,15 @@ import type { TableProps } from 'antd'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   api,
+  pageTokenForPage,
   type CharacterDetail,
   type CharacterListItem,
   type EventListItem,
   type PoemListItem,
 } from '../api'
 import { useIsMobile } from '../lib/useIsMobile'
+
+const PAGE_SIZE = 50
 
 function roleColor(r: string) {
   return r === '主角' ? 'red' : r === '配角' ? 'gold' : r === '群众' ? 'default' : 'default'
@@ -39,19 +42,34 @@ export default function Characters() {
 
   const [q, setQ] = useState('')
   const [items, setItems] = useState<CharacterListItem[]>([])
+  const [totalSize, setTotalSize] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [roleFilter, setRoleFilter] = useState<string[]>([])
+
+  // Reset to page 1 whenever the query changes.
+  useEffect(() => {
+    setPage(1)
+  }, [q])
 
   useEffect(() => {
     const t = setTimeout(() => {
       setLoading(true)
       api
-        .characters({ q: q || undefined, sort: 'chapters', limit: 5000 })
-        .then((r) => setItems(r.items))
+        .characters({
+          q: q || undefined,
+          sort: 'chapters',
+          page_size: PAGE_SIZE,
+          page_token: pageTokenForPage(page, PAGE_SIZE),
+        })
+        .then((r) => {
+          setItems(r.items)
+          setTotalSize(r.total_size)
+        })
         .finally(() => setLoading(false))
     }, 200)
     return () => clearTimeout(t)
-  }, [q])
+  }, [q, page])
 
   const filteredItems =
     roleFilter.length > 0 ? items.filter((c) => roleFilter.includes(c.primary_role)) : items
@@ -132,8 +150,17 @@ export default function Characters() {
         onChange={(_p, filters) => {
           setRoleFilter((filters.primary_role as string[] | null) ?? [])
         }}
-        pagination={false}
-        scroll={{ y: 'calc(100vh - 138px)', x: isMobile ? 'max-content' : undefined }}
+        pagination={{
+          current: page,
+          pageSize: PAGE_SIZE,
+          total: totalSize,
+          showSizeChanger: false,
+          showTotal: (t) => `共 ${t} 名`,
+          onChange: (p) => setPage(p),
+          size: 'small',
+          simple: isMobile,
+        }}
+        scroll={{ y: 'calc(100vh - 180px)', x: isMobile ? 'max-content' : undefined }}
       />
     </Card>
   )
@@ -222,7 +249,7 @@ function CharacterDetailPane({ id }: { id: number }) {
     if (tab !== 'events' || events !== null) return
     setEventsLoading(true)
     api
-      .events({ participant_id: id, limit: 5000 })
+      .events({ participant_id: id, page_size: 1000 })
       .then((r) => setEvents(r.items))
       .finally(() => setEventsLoading(false))
   }, [id, tab, events])
@@ -231,7 +258,7 @@ function CharacterDetailPane({ id }: { id: number }) {
     if (tab !== 'poems' || poems !== null) return
     setPoemsLoading(true)
     api
-      .poems({ author_id: id, limit: 5000 })
+      .poems({ author_id: id, page_size: 1000 })
       .then((r) => setPoems(r.items))
       .finally(() => setPoemsLoading(false))
   }, [id, tab, poems])
