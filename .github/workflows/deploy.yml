@@ -1,4 +1,9 @@
-name: Build UI Artifact
+# Workflow shipped to the PUBLIC release repo
+# (Shuozeli/dream-of-the-red-chamber). Builds + deploys to GitHub Pages.
+# Kept separate from the private repo's workflow so prepare_release.sh
+# doesn't overwrite it with the private build-only file.
+
+name: Deploy to GitHub Pages
 
 on:
   push:
@@ -13,9 +18,11 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: ui-artifact
+  group: pages
   cancel-in-progress: true
 
 jobs:
@@ -36,7 +43,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: ui/pnpm-lock.yaml
 
-      - name: Setup Python (for build_duckdb.py)
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -49,13 +56,21 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build (sync-data → tsc → vite)
-        # sync-data runs scripts/build_duckdb.py which constructs the
-        # ui/public/hongloumeng.duckdb file from data/json/*.json.
         working-directory: ui
         run: pnpm build
 
-      - name: Upload UI artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: ui-dist
           path: ui/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
