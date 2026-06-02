@@ -53,8 +53,9 @@ export default function GraphView() {
   const urlFocal = idParam ? Number(idParam) : null
   const isMobile = useIsMobile()
 
-  const containerRef = useRef<HTMLDivElement | null>(null)
   const graphRef = useRef<Graph | null>(null)
+  const renderSeqRef = useRef(0)
+  const [graphHost, setGraphHost] = useState<HTMLDivElement | null>(null)
 
   const [focalId, setFocalIdState] = useState(urlFocal ?? 2) // 贾宝玉 default
   // Setter that also updates the URL so refresh keeps the focal.
@@ -130,9 +131,9 @@ export default function GraphView() {
 
   // ----- mount G6 once -----
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!graphHost) return
     const graph = new Graph({
-      container: containerRef.current,
+      container: graphHost,
       autoFit: 'view',
       autoResize: true,
       layout: {
@@ -214,17 +215,17 @@ export default function GraphView() {
       graphRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [graphHost])
 
   // ----- push fresh data to G6 (with explicit clear to avoid stale nodes) -----
   useEffect(() => {
     const g = graphRef.current
     if (!g || !data) return
+    const seq = ++renderSeqRef.current
     // G6 v5 keeps node positions + states when ids overlap between datasets,
     // which makes the previous focal "stick" after switching focus. Clearing
     // the graph first forces a full re-layout from scratch.
-    ;(g as any).clear?.()
-    g.setData({
+    const nextData = {
       nodes: data.nodes.map((n) => ({
         id: String(n.id),
         data: {
@@ -253,8 +254,17 @@ export default function GraphView() {
           },
         }
       }),
+    }
+
+    ;(async () => {
+      await (g as any).clear?.()
+      if (seq !== renderSeqRef.current || graphRef.current !== g) return
+      g.setData(nextData)
+      await g.render()
+    })().catch((e) => {
+      // Keep the rest of the page usable if G6 rejects during a resize/render race.
+      console.error('Failed to render relationship graph', e)
     })
-    g.render()
   }, [data, compareId, focalId])
 
   const fit = () => graphRef.current?.fitView?.()
@@ -329,7 +339,7 @@ export default function GraphView() {
       styles={{ body: { padding: 0, height: 'calc(100% - 38px)', background: '#fafaf7' } }}
       style={{ height: '100%', borderRadius: 0, border: 'none' }}
     >
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div ref={setGraphHost} style={{ width: '100%', height: '100%' }} />
     </Card>
   )
 
